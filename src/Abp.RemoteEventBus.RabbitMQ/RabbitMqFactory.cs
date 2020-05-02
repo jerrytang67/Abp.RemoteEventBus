@@ -1,9 +1,7 @@
-﻿using Abp.Dependency;
-using RabbitMQ.Client;
+﻿using RabbitMQ.Client;
 using System;
-using System.Collections.Generic;
-using System.Text;
 using Castle.Core.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Abp.RemoteEventBus.RabbitMQ
 {
@@ -12,29 +10,41 @@ namespace Abp.RemoteEventBus.RabbitMQ
         IModel GetChannel();
     }
 
+    public class RabbitMQOptions
+    {
+        public string UserName { get; set; } = "guest";
+        public string Password { get; set; } = "guest";
+        public string HostName { get; set; } = "127.0.0.1";
+        public int Port { get; set; } = 5672;
+
+        public string QueryName { get; set; } = "Default_QueryName";
+        public bool AutomaticRecoveryEnabled { get; set; } = true;
+    }
 
     public class RabbitMqFactory : IRabbitMqFactory
     {
+        private readonly RabbitMQOptions _options;
         private readonly ILogger _logger;
         private IConnection _connection;
         private IModel _channel;
-        public ILogger Logger;
 
         public RabbitMqFactory(
-            IRabbitMQSetting rabbitMQSetting,
+            RabbitMQOptions options,
             ILogger logger
         )
         {
+            _options = options;
             _logger = logger;
-            
-            rabbitMQSetting.Url = rabbitMQSetting.Url ?? "amqp://guest:guest@127.0.0.1:5672/";
 
             try
             {
                 var factory = new ConnectionFactory()
                 {
-                    Uri = new Uri(rabbitMQSetting.Url),
-                    AutomaticRecoveryEnabled = true
+                    UserName = _options.UserName,
+                    Password = _options.Password,
+                    HostName = _options.HostName,
+                    Port = _options.Port,
+                    AutomaticRecoveryEnabled = _options.AutomaticRecoveryEnabled
                 };
                 _connection = factory.CreateConnection();
                 _channel = _connection.CreateModel();
@@ -46,12 +56,10 @@ namespace Abp.RemoteEventBus.RabbitMQ
             }
         }
 
-
         public IModel GetChannel()
         {
-            return this._channel;
+            return _channel;
         }
-
 
         public void Dispose()
         {
