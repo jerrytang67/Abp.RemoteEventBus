@@ -1,7 +1,9 @@
-﻿using Commons.Pool;
+﻿using System;
+using Commons.Pool;
 using RabbitMQ.Client;
 using System.Text;
 using System.Threading.Tasks;
+using Castle.Core.Logging;
 
 namespace Abp.RemoteEventBus.RabbitMQ
 {
@@ -9,34 +11,29 @@ namespace Abp.RemoteEventBus.RabbitMQ
     {
         private const string _exchangeTopic = "RemoteEventBus.Exchange.Topic";
 
-        private readonly IObjectPool<IConnection> _connectionPool;
-        
         private readonly IRemoteEventSerializer _remoteEventSerializer;
-
-        private bool _disposed;
+        private readonly ILogger _logger;
+        private readonly IRabbitMqFactory _rabbitMqFactory;
 
         public RabbitMQRemoteEventPublisher(
-            IPoolManager poolManager, 
             IRabbitMQSetting rabbitMQSetting,
-            IRemoteEventSerializer remoteEventSerializer
-            )
+            IRemoteEventSerializer remoteEventSerializer,
+            ILogger logger,
+            IRabbitMqFactory rabbitMqFactory
+        )
         {
             _remoteEventSerializer = remoteEventSerializer;
-            
-            _connectionPool = poolManager.NewPool<IConnection>()
-                                    .InitialSize(rabbitMQSetting.InitialSize)
-                                    .MaxSize(rabbitMQSetting.MaxSize)
-                                    .WithFactory(new PooledObjectFactory(rabbitMQSetting))
-                                    .Instance();
+            _logger = logger;
+            _rabbitMqFactory = rabbitMqFactory;
         }
 
         public void Publish(string topic, IRemoteEventData remoteEventData)
         {
-            var connection = _connectionPool.Acquire();
+            var connection = _rabbitMqFactory;
             try
             {
-                var channel = connection.CreateModel();
-                channel.ExchangeDeclare(_exchangeTopic, "topic",true);
+                var channel = _rabbitMqFactory.GetChannel();
+                channel.ExchangeDeclare(_exchangeTopic, "topic", true);
                 var body = Encoding.UTF8.GetBytes(_remoteEventSerializer.Serialize(remoteEventData));
                 var properties = channel.CreateBasicProperties();
                 properties.Persistent = true;
@@ -44,26 +41,18 @@ namespace Abp.RemoteEventBus.RabbitMQ
             }
             finally
             {
-                _connectionPool.Return(connection);
+                // _connectionPool.Return(connection);
             }
         }
 
         public Task PublishAsync(string topic, IRemoteEventData remoteEventData)
         {
-            return Task.Factory.StartNew(() =>
-            {
-                Publish(topic, remoteEventData);
-            });
+            return Task.Factory.StartNew(() => { Publish(topic, remoteEventData); });
         }
 
         public void Dispose()
         {
-            if (!_disposed)
-            {
-                _connectionPool.Dispose();
-
-                _disposed = true;
-            }
+            _rabbitMqFactory?.Dispose();
         }
     }
 }

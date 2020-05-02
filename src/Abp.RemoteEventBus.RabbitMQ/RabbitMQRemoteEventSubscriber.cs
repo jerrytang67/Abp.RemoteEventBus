@@ -6,25 +6,28 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
+using Abp.Dependency;
+using Castle.Core.Logging;
 
 namespace Abp.RemoteEventBus.RabbitMQ
 {
     public class RabbitMQRemoteEventSubscriber : IRemoteEventSubscriber
     {
+        private readonly IRabbitMqFactory _rabbitMqFactory;
+        private readonly ILogger _logger;
         private readonly ConcurrentDictionary<string, IModel> _dictionary;
-        private readonly List<IConnection> _connectionsAcquired;
-        private readonly PooledObjectFactory _factory;
 
         private string _exchangeTopic = "RemoteEventBus.Exchange.Topic";
         private string _queuePrefix = "RemoteEventBus.Queue.";
 
-        private bool _disposed;
-
-        public RabbitMQRemoteEventSubscriber(IRabbitMQSetting rabbitMQSetting)
+        public RabbitMQRemoteEventSubscriber(
+            IRabbitMQSetting rabbitMQSetting,
+            IRabbitMqFactory rabbitMqFactory,
+            ILogger logger)
         {
-            _factory = new PooledObjectFactory(rabbitMQSetting);
+            _rabbitMqFactory = rabbitMqFactory;
+            _logger = logger;
             _dictionary = new ConcurrentDictionary<string, IModel>();
-            _connectionsAcquired = new List<IConnection>();
         }
 
         public void Subscribe(IEnumerable<string> topics, Action<string, string> handler)
@@ -37,13 +40,11 @@ namespace Abp.RemoteEventBus.RabbitMQ
 
             foreach (var topic in topics)
             {
-                var connection = _factory.Create();
-                _connectionsAcquired.Add(connection);
                 try
                 {
-                    var channel = connection.CreateModel();
+                    var channel = _rabbitMqFactory.GetChannel();
                     var queue = _queuePrefix + topic;
-                    channel.ExchangeDeclare(_exchangeTopic, "topic",true);
+                    channel.ExchangeDeclare(_exchangeTopic, "topic", true);
                     channel.QueueDeclare(queue, true, false, false, null);
                     channel.QueueBind(queue, _exchangeTopic, topic);
                     var consumer = new EventingBasicConsumer(channel);
@@ -57,7 +58,7 @@ namespace Abp.RemoteEventBus.RabbitMQ
                 }
                 finally
                 {
-                    _connectionsAcquired.Remove(connection);
+                    // _connectionsAcquired.Remove(connection);
                 }
             }
         }
@@ -86,26 +87,18 @@ namespace Abp.RemoteEventBus.RabbitMQ
 
         public void UnsubscribeAll()
         {
-            Unsubscribe(_dictionary.Select(p => p.Key));
+            throw new NotImplementedException();
         }
 
         public Task UnsubscribeAllAsync()
         {
-            return Task.Factory.StartNew(UnsubscribeAll);
+            throw new NotImplementedException();
         }
 
         public void Dispose()
         {
-            if (!_disposed)
-            {
-                UnsubscribeAll();
-                foreach (var connection in _connectionsAcquired)
-                {
-                    _factory.Destroy(connection);
-                }
-
-                _disposed = true;
-            }
+            _logger.Warn("I Dispose");
+            _rabbitMqFactory.Dispose();
         }
     }
 }

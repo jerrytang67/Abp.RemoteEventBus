@@ -10,4 +10,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Abp.RemoteEventBus.RabbitMQ\Abp.RemoteEventBus.RabbitMQ.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Remove="log4net.config" />
+    <Content Include="log4net.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>
